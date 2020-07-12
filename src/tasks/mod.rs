@@ -165,7 +165,7 @@ pub fn rawarticle_filter_to_content_reply() {
             tfidf_bufreader.read_to_end(&mut buf);
             let tfidf = bincode::deserialize::<tfidf::TfIdf>(&buf).unwrap();
             let mut ff_reader =
-                BufReader::new(File::open("../cut_corpus/finalfusion.2e.w_zh.pq.fifu").unwrap());
+                BufReader::new(File::open("../cut_corpus/finalfusion.10e.w_zh_en_ptt.s60.pq.fifu").unwrap());
             let embeds =
                 Embeddings::<VocabWrap, StorageWrap>::mmap_embeddings(&mut ff_reader).unwrap();
             let mut stopwords_file = File::open("stopwords.txt").unwrap();
@@ -418,7 +418,7 @@ pub fn content_reply_to_reply_and_index() {
             tfidf_bufreader.read_to_end(&mut buf);
             let tfidf = bincode::deserialize::<tfidf::TfIdf>(&buf).unwrap();
             let mut ff_reader =
-                BufReader::new(File::open("../cut_corpus/finalfusion.2e.w_zh.pq.fifu").unwrap());
+                BufReader::new(File::open("../cut_corpus/finalfusion.10e.w_zh_en_ptt.s60.pq.fifu").unwrap());
             let embeds =
                 Embeddings::<VocabWrap, StorageWrap>::mmap_embeddings(&mut ff_reader).unwrap();
             let mut stopwords_file = File::open("stopwords.txt").unwrap();
