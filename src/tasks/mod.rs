@@ -59,10 +59,14 @@ pub fn raw_article_sqlite_to_leveldb() {
         let _curr = curr.unwrap();
         let im_article = database::raw_ptt_article::Article {
             origin: database::raw_ptt_article::ArticleOrigin::PttOrigin {
-                title: _curr.title,
-                board: _curr.board,
+                title: _curr.title.clone(),
+                board: _curr.board.clone(),
             },
-            content: _curr.content,
+            content: String::from(format!(
+                "{}\n{}",
+                _curr.title.clone(),
+                _curr.content.clone()
+            )),
             pushes: {
                 let pushes: Vec<database::raw_ptt_article::Push> =
                     serde_json::from_str::<Vec<database::raw_ptt_article::Push>>(&_curr.pushes)
@@ -151,7 +155,7 @@ pub fn rawarticle_filter_to_content_reply() {
     let (work_sender, work_receiver) =
         bounded::<Result<database::raw_ptt_article::Article, ()>>(workers);
     let (result_sender, result_receiver) =
-        bounded::<Result<database::raw_ptt_article::ContentReply, ()>>(workers);
+        bounded::<Result<Vec<database::raw_ptt_article::ContentReply>, ()>>(workers);
     let (join_sender, join_receiver) = bounded::<()>(workers);
     let mut joins: Vec<std::thread::JoinHandle<()>> = Vec::new();
     //establish workers
@@ -164,8 +168,9 @@ pub fn rawarticle_filter_to_content_reply() {
             let mut buf: Vec<u8> = Vec::new();
             tfidf_bufreader.read_to_end(&mut buf);
             let tfidf = bincode::deserialize::<tfidf::TfIdf>(&buf).unwrap();
-            let mut ff_reader =
-                BufReader::new(File::open("../cut_corpus/finalfusion.10e.w_zh_en_ptt.s60.pq.fifu").unwrap());
+            let mut ff_reader = BufReader::new(
+                File::open("../cut_corpus/finalfusion.10e.w_zh_en_ptt.s60.pq.fifu").unwrap(),
+            );
             let embeds =
                 Embeddings::<VocabWrap, StorageWrap>::mmap_embeddings(&mut ff_reader).unwrap();
             let mut stopwords_file = File::open("stopwords.txt").unwrap();
@@ -177,24 +182,29 @@ pub fn rawarticle_filter_to_content_reply() {
             }
             let embedder = sentence_embedding::EmbeddingFetcher::new_from(tfidf, embeds, stopwords);
             let cutter = jieba_rs::Jieba::new();
+            let link_rule = Regex::new(r#"https?.+"#).unwrap();
+            let sentence_rule = Regex::new(r#"(\?|？|!|！|ww+|。)"#).unwrap();
+            let url_rule = Regex::new(r#"https?://[^\s]+"#).unwrap();
+            let unmeanful_rule = Regex::new(r#"^XD+|推$"#).unwrap();
             while true {
                 let _article = match clone_work_receiver.recv().unwrap() {
                     Ok(x) => x,
                     Err(_) => break,
                 };
 
-                let mut filtered = database::raw_ptt_article::ContentReply {
-                    content: _article.content,
-                    replies: Vec::new(),
-                };
+                // let mut filtered = database::raw_ptt_article::ContentReply {
+                //     content: _article.content,
+                //     replies: Vec::new(),
+                // };
                 let book_rule = Regex::new(r#"\[.+\].+"#).unwrap();
                 //filter reply
+                let mut book_replies: Vec<String> = Vec::new();
                 match _article.origin {
                     database::raw_ptt_article::ArticleOrigin::PttOrigin { title, board } => {
                         if board == "AC_In" {
                             for push in &_article.pushes {
                                 if book_rule.is_match(&push[..]) {
-                                    filtered.replies.push(push.clone());
+                                    book_replies.push(push.clone());
                                 }
                             }
                         }
@@ -202,7 +212,15 @@ pub fn rawarticle_filter_to_content_reply() {
                     _ => {}
                 };
                 let mut groups: Vec<KMediumGroup> = Vec::new();
+
                 for push in _article.pushes {
+                    //skip links
+                    if link_rule.is_match(&push.clone()[..]) {
+                        continue;
+                    }
+                    if unmeanful_rule.is_match(&push.clone()[..]) {
+                        continue;
+                    }
                     let hit = false;
                     let words = cutter
                         .cut(&push.clone()[..], true)
@@ -246,23 +264,49 @@ pub fn rawarticle_filter_to_content_reply() {
                         }
                     }
                 }
+                let mut __articles: Vec<database::raw_ptt_article::ContentReply> = sentence_rule
+                    .split(&url_rule.replace(&_article.content.clone()[..], "")[..])
+                    .map(|sentence| database::raw_ptt_article::ContentReply {
+                        content: String::from(sentence),
+                        replies: Vec::new(),
+                    })
+                    .collect();
+                __articles[0].replies.append(&mut book_replies);
                 for group in groups {
                     if group.objects.len() > 5 {
+                        let mut closest = 0;
+                        let mut sim = 0f32;
+                        for i in 0..__articles.len() {
+                            let words = cutter
+                                .cut(&__articles[i].content.clone()[..], true)
+                                .iter()
+                                .map(|x| String::from(*x))
+                                .collect::<Vec<String>>();
+                            let embedding = match embedder.words_to_vector(words) {
+                                Some(x) => x,
+                                None => continue,
+                            };
+                            let _sim =
+                                math_tool::consine_similarity(&group.medium, &embedding).unwrap();
+                            if _sim > sim {
+                                sim = _sim;
+                                closest = i;
+                            }
+                        }
+                        let mut filtered_rerplies: std::collections::HashSet<String> =
+                            std::collections::HashSet::new();
                         for obj in group.objects {
-                            filtered.replies.push(obj.context);
+                            filtered_rerplies.insert(obj.context);
+                        }
+                        for key in filtered_rerplies {
+                            __articles[0].replies.push(key.clone());
+                            if closest != 0 {
+                                __articles[closest].replies.push(key);
+                            }
                         }
                     }
                 }
-                let mut filtered_rerplies: std::collections::HashSet<String> =
-                    std::collections::HashSet::new();
-                for reply in filtered.replies {
-                    filtered_rerplies.insert(reply);
-                }
-                filtered.replies = Vec::new();
-                for key in filtered_rerplies {
-                    filtered.replies.push(key);
-                }
-                clone_result_sender.send(Ok(filtered)).unwrap();
+                clone_result_sender.send(Ok(__articles)).unwrap();
             }
             clone_join_sender.send(()).unwrap();
         });
@@ -273,21 +317,24 @@ pub fn rawarticle_filter_to_content_reply() {
         let mut step = 0i32;
         let mut reply_step = 0i32;
         while true {
-            let result = match result_receiver.recv().unwrap() {
+            let __articles = match result_receiver.recv().unwrap() {
                 Ok(x) => x,
                 Err(_) => break,
             };
-            if result.replies.len() > 0 {
-                let write_opts = leveldb::options::WriteOptions::new();
-                match output_database.put(
-                    write_opts,
-                    step,
-                    bincode::serialize(&result).unwrap().as_ref(),
-                ) {
-                    Ok(_) => (),
-                    Err(e) => panic!("failed to write to database: {:?}", e),
-                };
-                step += 1;
+            for result in __articles {
+                if result.replies.len() > 0 {
+                    //break into sections, pairing group, multi write
+                    let write_opts = leveldb::options::WriteOptions::new();
+                    match output_database.put(
+                        write_opts,
+                        step,
+                        bincode::serialize(&result).unwrap().as_ref(),
+                    ) {
+                        Ok(_) => (),
+                        Err(e) => panic!("failed to write to database: {:?}", e),
+                    };
+                    step += 1;
+                }
             }
         }
         println!("\nwrite {} records", step);
@@ -302,6 +349,33 @@ pub fn rawarticle_filter_to_content_reply() {
         };
         work_sender.send(Ok(_article)).unwrap();
     }
+    //QA Set Loading
+    let qa_set = BufReader::new(File::open("db/Gossiping-QA-Dataset-2_0.csv").unwrap()).lines();
+    let mut line_num = 0;
+    for line in qa_set {
+        if line_num != 0 {
+            let _line = match line {
+                Ok(x) => x,
+                Err(x) => break,
+            };
+            let mut qa = _line.split("\t");
+            let question = match qa.next() {
+                Some(x) => x,
+                None => continue,
+            };
+            let answer = match qa.next() {
+                Some(x) => x,
+                None => continue,
+            };
+            let mut article = database::raw_ptt_article::ContentReply {
+                content: String::from(question),
+                replies: vec![String::from(answer)],
+            };
+            result_sender.send(Ok(vec![article])).unwrap();
+        }
+        line_num += 1;
+    }
+    println!("{} from qa_set", line_num - 1);
     for i in 0..workers {
         work_sender.send(Err(())).unwrap();
         join_receiver.recv().unwrap();
@@ -417,8 +491,9 @@ pub fn content_reply_to_reply_and_index() {
             let mut buf: Vec<u8> = Vec::new();
             tfidf_bufreader.read_to_end(&mut buf);
             let tfidf = bincode::deserialize::<tfidf::TfIdf>(&buf).unwrap();
-            let mut ff_reader =
-                BufReader::new(File::open("../cut_corpus/finalfusion.10e.w_zh_en_ptt.s60.pq.fifu").unwrap());
+            let mut ff_reader = BufReader::new(
+                File::open("../cut_corpus/finalfusion.10e.w_zh_en_ptt.s60.pq.fifu").unwrap(),
+            );
             let embeds =
                 Embeddings::<VocabWrap, StorageWrap>::mmap_embeddings(&mut ff_reader).unwrap();
             let mut stopwords_file = File::open("stopwords.txt").unwrap();
@@ -497,7 +572,7 @@ pub fn content_reply_to_reply_and_index() {
     // let mut reply_texts: Vec<String> = Vec::new();
     let mut reply_vectors = granne::angular::Vectors::new();
     let mut finished = 0usize;
-    let pb = ProgressBar::new(224669);
+    let pb = ProgressBar::new(1603811);
     pb.set_style(ProgressStyle::default_bar().template(
         "processing: [{elapsed_precise}] [{bar:cyan/blue}] {pos}/{len} {per_sec} ({eta})",
     ));
@@ -510,7 +585,7 @@ pub fn content_reply_to_reply_and_index() {
             Err(e) => panic!("failed to open database: {:?}", e),
         };
     //result writer
-    while true {
+    loop {
         pb.inc(1);
         if finished >= workers {
             break;
@@ -534,9 +609,9 @@ pub fn content_reply_to_reply_and_index() {
         }
         let mut reply_vector_mean: Vec<f32> = vec![0f32; reply_vector[0].len()];
         let vector_len = reply_vector.len() as f32;
-        for _r in reply_vector{
-            for i in 0.._r.len(){
-                reply_vector_mean[i] += _r[i]/vector_len;
+        for _r in reply_vector {
+            for i in 0.._r.len() {
+                reply_vector_mean[i] += _r[i] / vector_len;
             }
         }
         reply_vectors.push(&angular::Vector::from(reply_vector_mean));
@@ -552,6 +627,7 @@ pub fn content_reply_to_reply_and_index() {
         };
     }
     pb.finish();
+
     println!();
     println!(
         "received {} articles, {} replies",
@@ -603,7 +679,7 @@ pub fn test_reply_storage() {
     pb.set_style(ProgressStyle::default_bar().template(
         "processing: [{elapsed_precise}] [{bar:cyan/blue}] {pos}/{len} {per_sec} ({eta})",
     ));
-    let mut reply_groups:Vec<database::raw_ptt_article::CompressedReplies> = Vec::new();
+    let mut reply_groups: Vec<database::raw_ptt_article::CompressedReplies> = Vec::new();
     for article in iter {
         pb.inc(1);
         let _article =
@@ -611,7 +687,7 @@ pub fn test_reply_storage() {
                 Ok(a) => a,
                 Err(_) => continue,
             };
-        let mut replies:Vec<String> = Vec::new();
+        let mut replies: Vec<String> = Vec::new();
         for reply in _article.replies {
             replies.push(reply);
         }
@@ -626,5 +702,7 @@ pub fn test_reply_storage() {
     println!("processed {} groups", reply_groups.len());
     let mut reply_group_file = File::create("reply_group.bin").unwrap();
     let mut reply_file = File::create("reply.bin").unwrap();
-    reply_group_file.write_all(bincode::serialize(&reply_groups).unwrap().as_ref()).unwrap();
+    reply_group_file
+        .write_all(bincode::serialize(&reply_groups).unwrap().as_ref())
+        .unwrap();
 }

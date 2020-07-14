@@ -26,3 +26,11 @@ serde_json = "1.0"
 threadpool = "1.8"
 timeit = "0.1"
 libflate = "1"
+
+[lib]
+name = "vec2seq_rust"
+path = "src/lib.rs"
+
+[[bin]]
+name = "vec2seq_rust_cli"
+path = "src/main.rs"
