@@ -147,6 +147,6 @@ fn main() {
     // tasks::content_reply_to_reply_and_index();
     // tasks::test_reply_storage();
     // test_sentence_sim();
-    // test_vec2seq();
-    jieba_test();
+    test_vec2seq();
+    // jieba_test();
 }
