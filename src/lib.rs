@@ -97,7 +97,7 @@ impl Vec2Seq<'_> {
     ) -> Option<Vec<String>> {
         //setting
         let self_pun = 0.1f32;
-        let threshold = 0.65f32;
+        let threshold = 0.75f32;
         let step = 0.1f32;
         let words = self
             .cutter
