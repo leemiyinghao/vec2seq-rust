@@ -117,13 +117,25 @@ fn test_vec2seq() {
     }
 }
 use jieba_rs::{Jieba, TokenizeMode};
-fn jieba_dag_test() {
+fn jieba_test() {
     let j = Jieba::new();
     println!(
         "{:?}",
-        j.tokenize(
+        j.cut(
             "有沒有新竹美食的八卦?在這邊快餓死了",
-            TokenizeMode::Default,
+            true
+        )
+    );
+    println!(
+        "{:?}",
+        j.cut_all(
+            "有沒有新竹美食的八卦?在這邊快餓死了"
+        )
+    );
+    println!(
+        "{:?}",
+        j.cut_for_search(
+            "有沒有新竹美食的八卦?在這邊快餓死了",
             true
         )
     );
@@ -135,6 +147,6 @@ fn main() {
     // tasks::content_reply_to_reply_and_index();
     // tasks::test_reply_storage();
     // test_sentence_sim();
-    test_vec2seq();
-    // jieba_dag_test();
+    // test_vec2seq();
+    jieba_test();
 }

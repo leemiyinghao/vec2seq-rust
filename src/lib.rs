@@ -172,8 +172,10 @@ impl Vec2Seq<'_> {
         }
         let mut _replies: Vec<String> = Vec::new();
         for reply in replies {
-            for text in reply.reply_group.get() {
-                _replies.push(text);
+            if reply.similarity > threshold{
+                for text in reply.reply_group.get() {
+                    _replies.push(text);
+                }
             }
         }
         if _replies.len() > 0 {
