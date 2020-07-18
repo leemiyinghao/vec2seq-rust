@@ -94,10 +94,11 @@ impl Vec2Seq<'_> {
         &self,
         sentence: String,
         cascading: bool,
+        threshold: f32,
+        self_compare: Option<f32>,
     ) -> Option<Vec<String>> {
         //setting
         let self_pun = 0.1f32;
-        let threshold = 0.75f32;
         let step = 0.05f32;
         let words = self
             .cutter
@@ -106,20 +107,33 @@ impl Vec2Seq<'_> {
             .map(|x| String::from(*x))
             .collect::<Vec<String>>();
         // println!("{:?}", words);
-        let _vec = self.embedder.words_to_vector(words);
-        if _vec.is_none() {
-            return None;
-        }
-        let vec = angular::Vector::from(_vec.unwrap());
+        let _vec = match self.embedder.words_to_vector(words) {
+            Some(x) => x,
+            None => return None,
+        };
+        let vec = angular::Vector::from(_vec.clone());
         let mut replies: Vec<ReplyGroupWithSimilarity> = Vec::new();
         let mut ids = self.reply_group.search(&vec, 200, 10);
         let mut self_ids = self.reply.search(&vec, 200, 10);
         let mut tmp: Vec<(usize, f32)> = Vec::new();
+        if self_compare.is_some() {
+            let __vec = &_vec.to_owned() ;
+            for i in 0..ids.len() {
+                ids[i].1 = ids[i].1 * (1f32 - self_compare.unwrap())
+                    + match math_tool::consine_similarity(
+                        &self.reply.get_element(ids[i].0).into_vec(),
+                        &__vec,
+                    ) {
+                        Ok(x) => x,
+                        Err(_) => 0f32,
+                    } * self_compare.unwrap();
+            }
+        }
         for mut id in self_ids {
             let mut matched = false;
             for i in 0..ids.len() {
                 if ids[i].0 == id.0 {
-                    ids[i].1 = if id.1 - self_pun > ids[i].1 {
+                    ids[i].1 = if self_compare.is_none() && id.1 - self_pun > ids[i].1 {
                         id.1
                     } else {
                         ids[i].1
@@ -172,7 +186,7 @@ impl Vec2Seq<'_> {
         }
         let mut _replies: Vec<String> = Vec::new();
         for reply in replies {
-            if reply.similarity > threshold{
+            if reply.similarity > threshold {
                 for text in reply.reply_group.get() {
                     _replies.push(text);
                 }

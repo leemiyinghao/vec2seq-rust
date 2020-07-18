@@ -107,7 +107,7 @@ fn test_vec2seq() {
         }
         //return replies
         println!("{}", &input[..]);
-        for reply in match vec2seq.search_replies(input.clone(), true) {
+        for reply in match vec2seq.search_replies(input.clone(), true, 0.75f32, Some(0.2f32)) {
             Some(x) => x,
             None => continue,
         } {
