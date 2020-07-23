@@ -144,9 +144,9 @@ fn main() {
     // tasks::raw_article_sqlite_to_leveldb();
     // tasks::rawarticle_to_tfidf();
     // tasks::rawarticle_filter_to_content_reply();
-    // tasks::content_reply_to_reply_and_index();
+    tasks::content_reply_to_reply_and_index();
     // tasks::test_reply_storage();
     // test_sentence_sim();
-    test_vec2seq();
+    // test_vec2seq();
     // jieba_test();
 }

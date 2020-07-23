@@ -185,7 +185,7 @@ pub fn rawarticle_filter_to_content_reply() {
             let link_rule = Regex::new(r#"https?.+"#).unwrap();
             let sentence_rule = Regex::new(r#"(\?|？|!|！|ww+|。)"#).unwrap();
             let url_rule = Regex::new(r#"https?://[^\s]+"#).unwrap();
-            let unmeanful_rule = Regex::new(r#"^XD+|推$"#).unwrap();
+            let unmeanful_rule = Regex::new(r#"^XD+|.*推.*|.*樓上.*|.*五樓.*$"#).unwrap();
             while true {
                 let _article = match clone_work_receiver.recv().unwrap() {
                     Ok(x) => x,
@@ -219,6 +219,9 @@ pub fn rawarticle_filter_to_content_reply() {
                         continue;
                     }
                     if unmeanful_rule.is_match(&push.clone()[..]) {
+                        continue;
+                    }
+                    if push.len() > 32 {
                         continue;
                     }
                     let hit = false;
@@ -273,7 +276,7 @@ pub fn rawarticle_filter_to_content_reply() {
                     .collect();
                 __articles[0].replies.append(&mut book_replies);
                 for group in groups {
-                    if group.objects.len() > 5 {
+                    if group.objects.len() > 3 {
                         let mut closest = 0;
                         let mut sim = 0f32;
                         for i in 0..__articles.len() {
@@ -350,32 +353,26 @@ pub fn rawarticle_filter_to_content_reply() {
         work_sender.send(Ok(_article)).unwrap();
     }
     //QA Set Loading
-    let qa_set = BufReader::new(File::open("db/Gossiping-QA-Dataset-2_0.csv").unwrap()).lines();
+    let mut qa_set = csv::Reader::from_reader(File::open("db/Gossiping-QA-Dataset-2_0.csv").unwrap());
     let mut line_num = 0;
-    for line in qa_set {
-        if line_num != 0 {
-            let _line = match line {
-                Ok(x) => x,
-                Err(x) => break,
-            };
-            let mut qa = _line.split("\t");
-            let question = match qa.next() {
-                Some(x) => x,
-                None => continue,
-            };
-            let answer = match qa.next() {
-                Some(x) => x,
-                None => continue,
-            };
-            let mut article = database::raw_ptt_article::ContentReply {
-                content: String::from(question),
-                replies: vec![String::from(answer)],
-            };
-            result_sender.send(Ok(vec![article])).unwrap();
-        }
+    for line in qa_set.records() {
+        let _line = match line {
+            Ok(x) => x,
+            Err(x) => {
+                println!("{:?}", x);
+                break;
+            }
+        };
+        let question = &_line[0];
+        let answer = &_line[1];
+        let mut article = database::raw_ptt_article::ContentReply {
+            content: String::from(question),
+            replies: vec![String::from(answer)],
+        };
+        result_sender.send(Ok(vec![article])).unwrap();
         line_num += 1;
     }
-    println!("{} from qa_set", line_num - 1);
+    println!("{} from qa_set", line_num);
     for i in 0..workers {
         work_sender.send(Err(())).unwrap();
         join_receiver.recv().unwrap();
@@ -606,6 +603,9 @@ pub fn content_reply_to_reply_and_index() {
             let write_opts = leveldb::options::WriteOptions::new();
             replies.push(reply.text);
             reply_vector.push(reply.vector);
+        }
+        if reply_vector.len() == 0{
+            continue;
         }
         let mut reply_vector_mean: Vec<f32> = vec![0f32; reply_vector[0].len()];
         let vector_len = reply_vector.len() as f32;

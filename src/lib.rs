@@ -117,7 +117,7 @@ impl Vec2Seq<'_> {
         let mut self_ids = self.reply.search(&vec, 200, 10);
         let mut tmp: Vec<(usize, f32)> = Vec::new();
         if self_compare.is_some() {
-            let __vec = &_vec.to_owned() ;
+            let __vec = &_vec.to_owned();
             for i in 0..ids.len() {
                 ids[i].1 = ids[i].1 * (1f32 - self_compare.unwrap())
                     + match math_tool::consine_similarity(
@@ -168,19 +168,23 @@ impl Vec2Seq<'_> {
                     .iter()
                     .map(|id| {
                         let read_opts = leveldb::options::ReadOptions::new();
-                        let content = self
-                            .reply_group_database
-                            .get(read_opts, id.0 as i32)
-                            .unwrap()
-                            .unwrap();
-                        ReplyGroupWithSimilarity {
-                            reply_group: bincode::deserialize::<
-                                database::raw_ptt_article::CompressedReplies,
-                            >(&content)
-                            .unwrap(),
-                            similarity: 1f32 - id.1,
+                        //avoid empty reply_group
+                        match self.reply_group_database.get(read_opts, id.0 as i32) {
+                            Ok(x) => match x {
+                                Some(content) => Some(ReplyGroupWithSimilarity {
+                                    reply_group: bincode::deserialize::<
+                                        database::raw_ptt_article::CompressedReplies,
+                                    >(&content)
+                                    .unwrap(),
+                                    similarity: 1f32 - id.1,
+                                }),
+                                None => None,
+                            },
+                            Err(_) => None,
                         }
                     })
+                    .filter(|x| x.is_some())
+                    .map(|x| x.unwrap())
                     .collect::<Vec<ReplyGroupWithSimilarity>>(),
             );
         }
