@@ -34,7 +34,8 @@ impl EmbeddingFetcher {
     pub fn words_to_vector(&self, words: Vec<String>) -> Option<Vec<f32>> {
         let vecs = words
             .iter()
-            .filter(|x| !self.empty_checker.is_match(x) && !self.stopwords.contains(x.clone()))
+            // .filter(|x| !self.empty_checker.is_match(x) && !self.stopwords.contains(x.clone()))
+            .filter(|x| !self.empty_checker.is_match(x))
             .map(|x| self.word_to_vector((*x).clone()))
             .collect::<Vec<Vec<f32>>>();
         if vecs.len() == 0 {

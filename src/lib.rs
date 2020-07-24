@@ -109,12 +109,18 @@ impl Vec2Seq<'_> {
         // println!("{:?}", words);
         let _vec = match self.embedder.words_to_vector(words) {
             Some(x) => x,
-            None => return None,
+            None => {
+                log::debug!("no embedding");
+                return None;
+            },
         };
+        log::debug!("got embedding");
         let vec = angular::Vector::from(_vec.clone());
         let mut replies: Vec<ReplyGroupWithSimilarity> = Vec::new();
         let mut ids = self.reply_group.search(&vec, 200, 10);
+        log::debug!("ids: {}", ids.len());
         let mut self_ids = self.reply.search(&vec, 200, 10);
+        log::debug!("self_ids: {}", self_ids.len());
         let mut tmp: Vec<(usize, f32)> = Vec::new();
         if self_compare.is_some() {
             let __vec = &_vec.to_owned();

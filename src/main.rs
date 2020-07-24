@@ -92,6 +92,7 @@ fn test_vec2seq() {
         std::path::Path::new("db/reply_group"),
     );
     let mut input: String = String::new();
+    log::debug!("loaded");
     loop {
         //input sentence
         print!("Please enter some text: ");
@@ -140,13 +141,21 @@ fn jieba_test() {
         )
     );
 }
+use finalfusion::prelude::*;
+fn test_ff_subword(){
+    let mut ff_reader = BufReader::new(File::open("../cut_corpus/finalfusion.10e.w_zh_en_ptt.s60.pq.fifu").unwrap());
+    let embeds = Embeddings::<VocabWrap, StorageWrap>::mmap_embeddings(&mut ff_reader).unwrap();
+    println!("{:?}", embeds.embedding("教召"));
+}
 fn main() {
+    // env_logger::init();
     // tasks::raw_article_sqlite_to_leveldb();
     // tasks::rawarticle_to_tfidf();
-    // tasks::rawarticle_filter_to_content_reply();
+    tasks::rawarticle_filter_to_content_reply();
     tasks::content_reply_to_reply_and_index();
     // tasks::test_reply_storage();
     // test_sentence_sim();
     // test_vec2seq();
     // jieba_test();
+    // test_ff_subword();
 }
