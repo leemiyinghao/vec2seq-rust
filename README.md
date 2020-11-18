@@ -16,4 +16,8 @@ After word embeddings are extracted, all word embeddings in same sentence will b
 
 ### Vector Space Search
 
-To achive real-time-search over more than 2M of articles, we use [granne*](https://github.com/granne/granne), a Rust library for approximate nearest neighbor search based on [Hierarchical Navigable Small World (HNSW) graphs](https://arxiv.org/abs/1603.09320).
+To achieve real-time-search over more than 2M of articles, we use [granne*](https://github.com/granne/granne), a Rust library for approximate nearest neighbor search based on [Hierarchical Navigable Small World (HNSW) graphs](https://arxiv.org/abs/1603.09320).
+
+### Generate Replies
+
+While question from user can be matched to question in database on semantics, all replies can be seem as a proper reply for question. vec2seq will randomly choice one as final answer.
